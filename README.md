@@ -1,4 +1,3 @@
-#!/bin/bash
 # ========================================================================
 # README.sh — Point Beyond Class (PBC) Reproduction + Backbone Extension
 # ========================================================================
@@ -227,7 +226,7 @@ cd ../ || exit
 
 
 # ========================================================================
-# 11. CITATIONS (COMMENTED)
+# 11. CITATIONS
 # ========================================================================
 # @inproceedings{ji2022point,
 #   title={Point Beyond Class: A Benchmark for Weakly Semi-supervised Abnormality Localization in Chest X-Rays},
