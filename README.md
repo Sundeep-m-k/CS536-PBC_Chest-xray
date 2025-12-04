@@ -1,248 +1,164 @@
-# ========================================================================
-# README.sh — Point Beyond Class (PBC) Reproduction + Backbone Extension
-# ========================================================================
-# Authors:
-#   - Sundeep Muthukrishnan Kumaraswamy
-#   - Sai Snigdha Nadella
-#
-# Description:
-#   This bash-formatted README contains the complete documentation for
-#   reproducing the Point Beyond Class (PBC) benchmark and extending it
-#   using transformer backbones (ResNet-50, ViT-Base, Swin-Tiny).
-#
-#   EVERYTHING is placed inside this bash file as comments + runnable code.
-# ========================================================================
+# Reproducing Point Beyond Class (PBC) and Extending with Transformer Backbones
 
+Authors:
+- Sundeep Muthukrishnan Kumaraswamy
+- Sai Snigdha Nadella
 
-# ========================================================================
-# 1. BACKGROUND & MOTIVATION
-# ========================================================================
-# PBC solves the problem of expensive chest X-ray annotations by replacing
-# bounding boxes with a *single point annotation per lesion*.
-#
-# Key Ideas:
-#   - Modify DETR for Point → Box learning
-#   - Add Multi-Point Consistency (MP)
-#   - Add Symmetric Consistency (SC)
-#   - Use pseudo-labels to train a strong student model
-#
-# Project Goals:
-#   1. Reproduce PBC teacher model on RSNA & VinDR
-#   2. Extend with transformer backbones (ViT, Swin, ResNet)
-#   3. Identify best backbone for weakly-supervised localization
-# ========================================================================
+This repository reproduces the Point Beyond Class (PBC) benchmark from MICCAI 2022 on RSNA and VinDR-CXR, and extends it with a transformer backbone comparison (ResNet-50, ViT-Base, Swin-Tiny).
 
+---
 
-# ========================================================================
-# 2. REPOSITORY LAYOUT
-# ========================================================================
-# Point-Beyond-Class/
-# ├── data/
-# │   ├── RSNA/
-# │   ├── cxr/
-# ├── datasets/
-# ├── models/
-# │   ├── detr.py
-# │   ├── detr_vit.py
-# │   ├── detr_swin.py
-# ├── student/
-# ├── outfiles/logs/
-# ├── pyScripts/
-# │   ├── drawLogCXR8.py
-# │   ├── drawLogRSNA.py
-# ├── main.py
-# ├── main_vit.py
-# ├── main_swin.py
-# ├── start_RSNA.sh
-# ├── start_CXR8.sh
-# └── pbc_paper_env.yml
-# ========================================================================
+## 1. Background & Motivation
 
+Bounding-box annotation is expensive, slow, and hard to scale.  
+PBC reduces annotation cost by using ONE POINT per lesion instead of a bounding box.
 
-# ========================================================================
-# 3. DATASET PREPARATION
-# ========================================================================
+Key Ideas:
+- Point → Box DETR
+- Multi-Point Consistency (MP)
+- Symmetric Consistency (SC)
+- Pseudo labels for student model
 
-# --------------------- RSNA CONVERSION ---------------------
-echo "Converting RSNA dataset..."
-cd data/RSNA || exit
+Project Goals:
+1. Reproduce PBC results  
+2. Compare Swin, ViT, ResNet backbones  
+3. Identify best backbone for chest X-ray localization  
+
+---
+
+## 2. Repository Structure
+
+Point-Beyond-Class/
+├── data/
+│   ├── RSNA/
+│   ├── cxr/
+├── datasets/
+├── models/
+│   ├── detr.py
+│   ├── detr_swin.py
+│   ├── detr_vit.py
+├── student/
+├── outfiles/logs/
+├── pyScripts/
+├── main.py
+├── main_vit.py
+├── main_swin.py
+└── pbc_paper_env.yml
+
+---
+
+## 3. Dataset Preparation
+
+RSNA Conversion:
+cd data/RSNA
 python rowimg2jpg.py
 python row_csv2tgt_csv.py
 python csv2coco_rsna.py
-cd ../../
 
-# Output stored in:
-#   data/RSNA/cocoAnn/*p/*.json
+Output:
+data/RSNA/cocoAnn/*p/*.json
 
-
-# ---------------------- CXR8 / VinDR -----------------------
-echo "Converting CXR8 / VinDR dataset..."
-cd data/cxr || exit
+VinDR-CXR Conversion:
+cd data/cxr
 python selectDetImgs.py
 python generateCsvTxt.py
 python csv2coco.py
-cd ../../
 
-# Output stored in:
-#   data/cxr/ClsAll8_cocoAnnWBF/*p/*.json
-# ========================================================================
+Output:
+data/cxr/ClsAll8_cocoAnnWBF/*p/*.json
 
+---
 
-# ========================================================================
-# 4. PBC TRAINING PIPELINE
-# ========================================================================
+## 4. PBC Pipeline
 
-# STAGE 1 — TEACHER MODEL (POINT → BOX)
-#   Variants:
-#     - Baseline
-#     - Multi-Point Consistency (MP)
-#     - Symmetric Consistency (SC)
-#     - SC Pretrain + MP
+Stage 1 — Train Teacher (Point → Box)
+Variants:
+- Baseline
+- MP
+- SC
+- SC-Pretrain + MP
 
-# STAGE 2 — PSEUDO-LABEL GENERATION
+Stage 2 — Generate Pseudo Boxes:
+python main.py --eval --resume checkpoint.pth --save_csv pseudo.csv --generate_pseudo_bbox
 
-# STAGE 3 — STUDENT MODEL (MMDETECTION)
-# ========================================================================
-
-
-# ========================================================================
-# 5. TRAINING COMMANDS
-# ========================================================================
-
-# ------------------ BASELINE TEACHER EXAMPLE ------------------
-echo "Running Baseline Teacher Model (RSNA, 20%)..."
-
-partial=20
-python main.py \
-  --epochs 111 \
-  --lr_backbone 1e-5 \
-  --lr 1e-4 \
-  --dataset_file rsna \
-  --coco_path data/RSNA/cocoAnn/${partial}p \
-  --batch_size 16 \
-  --num_workers 16 \
-  --data_augment \
-  --position_embedding v4 \
-  --output_dir outfiles/models/RSNA/exp_baseline
-
-
-# ------------------ MULTI-POINT CONSISTENCY -------------------
-# Add these flags:
-#   --sample_points_num 2
-#   --cons_loss
-#   --cons_loss_coef 100
-
-
-# ------------------ SYMMETRIC CONSISTENCY ---------------------
-# Add these flags:
-#   --sample_points_num 1
-#   --train_with_unlabel_imgs
-#   --unlabel_cons_loss_coef 50
-#   --partial ${partial}
-
-
-# ------------------ SC PRETRAINING + MP -----------------------
-# Add flag:
-#   --load_from checkpoint0110.pth
-
-
-# ------------------ SWIN & VIT TRAINING -----------------------
-# Swin Transformer:
-#   python main_swin.py ...
-#
-# ViT:
-#   python main_vit.py ...
-# ========================================================================
-
-
-# ========================================================================
-# 6. GENERATING PSEUDO LABELS
-# ========================================================================
-echo "Generating pseudo-labels..."
-
-python main.py \
-  --eval \
-  --resume checkpoint.pth \
-  --save_csv pseudo.csv \
-  --generate_pseudo_bbox
-
+Convert pseudo labels:
 cd data/RSNA && python eval2train_RSNA.py
 cd ../cxr && python eval2train_CXR8.py
-cd ../../
-# ========================================================================
 
+Stage 3 — Student Model (MMDetection):
+python3 tools/train.py configs/faster/faster_xxx.py --seed 42 --deterministic
 
-# ========================================================================
-# 7. STUDENT MODEL TRAINING (MMDETECTION)
-# ========================================================================
-# Example:
-# python3 tools/train.py configs/faster/faster_xxx.py \
-#   --seed 42 \
-#   --deterministic
-# ========================================================================
+---
 
+## 5. Training Commands
 
-# ========================================================================
-# 8. BACKBONE COMPARISON RESULTS
-# ========================================================================
-# Dataset: VinDR-CXR, 50% training data
-#
-# BACKBONE PERFORMANCE (AP50):
-#   ResNet-50     = 0.2930
-#   ViT-Base      = 0.1982
-#   Swin-Tiny     = 0.3069   <-- BEST
-#
-# KEY INSIGHTS:
-#   - ViT fails due to lack of multi-scale features
-#   - Swin has hierarchical windows + strong local attention
-#   - Swin is most stable under MP + SC
-#   - Swin is recommended backbone for medical images
-# ========================================================================
+Baseline Teacher (RSNA, 20%):
+python main.py --epochs 111 --lr_backbone 1e-5 --lr 1e-4 --dataset_file rsna --coco_path data/RSNA/cocoAnn/20p --batch_size 16 --num_workers 16 --data_augment --position_embedding v4 --output_dir outfiles/models/RSNA/exp_baseline
 
+Multi-Point Consistency:
+--sample_points_num 2
+--cons_loss
+--cons_loss_coef 100
 
-# ========================================================================
-# 9. LOG VISUALIZATION
-# ========================================================================
-cd pyScripts || exit
+Symmetric Consistency:
+--sample_points_num 1
+--train_with_unlabel_imgs
+--unlabel_cons_loss_coef 50
+--partial 20
 
-echo "Plotting logs..."
+SC-Pretrain + MP:
+--load_from checkpoint0110.pth
+
+Backbone-specific:
+python main_swin.py ...
+python main_vit.py ...
+
+---
+
+## 6. Backbone Results (VinDR-CXR, 50%)
+
+ResNet-50: 0.2930  
+ViT-Base: 0.1982  
+Swin-Tiny: 0.3069
+
+Conclusion:
+- Swin-Tiny is the best backbone  
+- ViT lacks multi-scale representation  
+- Swin is more stable under MP + SC  
+
+---
+
+## 7. Visualization
+
+cd pyScripts
 python drawLogCXR8.py
 python drawLogRSNA.py
 
-cd ../ || exit
-# ========================================================================
+---
 
+## 8. Future Work
 
-# ========================================================================
-# 10. FUTURE WORK
-# ========================================================================
-# - Build a custom medical transformer
-# - Explore CNN + Transformer hybrid models
-# - Improve pseudo labels using uncertainty estimation
-# - Evaluate on NIH, CheXpert, MIMIC-CXR
-# - Add explainability (Grad-CAM, attention visualization)
-# - Develop radiologist-in-the-loop active learning
-# ========================================================================
+- CXR-specific Transformer  
+- CNN + Transformer hybrid  
+- Better pseudo labels using uncertainty  
+- Multi-dataset evaluation (NIH, CheXpert, MIMIC-CXR)  
+- Explainability: Grad-CAM, attention rollout  
+- Radiologist-in-the-loop learning  
 
+---
 
-# ========================================================================
-# 11. CITATIONS
-# ========================================================================
-# @inproceedings{ji2022point,
-#   title={Point Beyond Class: A Benchmark for Weakly Semi-supervised Abnormality Localization in Chest X-Rays},
-#   author={Ji, Haoqin and Liu, Haozhe and Li, Yuexiang and Xie, Jinheng and He, Nanjun and Huang, Yawen and Wei, Dong and Chen, Xinrong and Shen, Linlin and Zheng, Yefeng},
-#   booktitle={MICCAI},
-#   pages={249--260},
-#   year={2022},
-#   organization={Springer}
-# }
-#
-# @article{ji2022benchmark,
-#   title={A Benchmark for Weakly Semi-Supervised Abnormality Localization in Chest X-Rays},
-#   author={Ji, Haoqin and Liu, Haozhe and Li, Yuexiang and Xie, Jinheng and He, Nanjun and Huang, Yawen and Wei, Dong and Chen, Xinrong and Shen, Linlin and Zheng, Yefeng},
-#   journal={arXiv preprint arXiv:2209.01988},
-#   year={2022}
-# }
-# ========================================================================
+## 9. Citation
 
-# END OF README.sh
+@inproceedings{ji2022point,
+  title={Point Beyond Class: A Benchmark for Weakly Semi-supervised Abnormality Localization in Chest X-Rays},
+  author={Ji, Haoqin and Liu, Haozhe and Li, Yuexiang and Xie, Jinheng and He, Nanjun and Huang, Yawen and Wei, Dong and Chen, Xinrong and Shen, Linlin and Zheng, Yefeng},
+  booktitle={MICCAI},
+  year={2022}
+}
+
+@article{ji2022benchmark,
+  title={A Benchmark for Weakly Semi-Supervised Abnormality Localization in Chest X-Rays},
+  author={Ji, Haoqin and Liu, Haozhe and Li, Yuexiang and Xie, Jinheng and He, Nanjun and Huang, Yawen and Wei, Dong and Chen, Xinrong and Shen, Linlin and Zheng, Yefeng},
+  journal={arXiv preprint arXiv:2209.01988},
+  year={2022}
+}
