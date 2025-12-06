@@ -179,22 +179,19 @@ Reason:
 - RSNA labels are noisier; Swin handles noise better  
 - ViT is unstable with sparse point supervision  
 
+
 ---
+## 7. Logs 
 
-## 7. Visualization Scripts
+All running logs and metrics are present in /Output/outfiles/models/...
 
-cd pyScripts
-python drawLogCXR8.py
-python drawLogRSNA.py
+## 8. Visualization Scripts
 
-Outputs:
-- Loss curves  
-- AP50 curves  
-- Backbone comparison graphs  
+All plots are present in /Output/outfiles/plots and the plots to compare the backbones are present here /Output/outfiles/plots_backbone_compare
 
 ---
 
-## 8. Future Work (Extended)
+## 9. Future Work (Extended)
 
 - Design anatomy-aware Swin Transformer for CXR  
 - Combine CNN low-level cues + Transformer high-level features  
@@ -205,7 +202,7 @@ Outputs:
 
 ---
 
-## 9. Citation
+## 10. Citation
 
 @inproceedings{ji2022point,
   title={Point Beyond Class: A Benchmark for Weakly Semi-supervised Abnormality Localization in Chest X-Rays},
